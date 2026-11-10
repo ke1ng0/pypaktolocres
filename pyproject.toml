@@ -10,7 +10,7 @@ readme = "README.md"
 requires-python = ">=3.9"
 dependencies = [
     "pyuepak>=0.2.8",
-    "pylocres==0.1.9.2",
+    "pylocres>=0.1.9.2",
     "cryptography",
 ]
 
