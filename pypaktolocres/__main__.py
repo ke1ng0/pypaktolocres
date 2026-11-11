@@ -1,16 +1,17 @@
 """
 Command line interface.
 
-  python -m pypaktolocres <pak> -o Game_en.locres [--reference fr.locres]
-                          [--csv out.csv] [--prefix SurrounDead/] [--ns ""]
+  python -m pypaktolocres <pak-or-directory> -o Game_en.locres
+                          [--reference fr.locres] [--csv out.csv] [--ns ""]
 
-Reads only the needed files from the pak (no full unpack), extracts the FText
-English sources, and writes a .locres (Compact v1 by default).
+Reads needed files from a .pak or an unpacked asset directory, extracts FText
+and StringTable sources, and writes a .locres (Compact v1 by default).
 """
 from __future__ import annotations
 
 import argparse
 import csv
+import os
 import sys
 import time
 
@@ -25,9 +26,9 @@ def _pct(done, total):
 def main(argv=None) -> int:
     ap = argparse.ArgumentParser(
         prog="pypaktolocres",
-        description="Extract FText EN sources from a UE .pak and build a .locres.",
+        description="Extract FText and StringTable sources from UE assets and build a .locres.",
     )
-    ap.add_argument("pak", help="path to the .pak file")
+    ap.add_argument("pak", help="path to a .pak file or unpacked asset directory")
     ap.add_argument("-o", "--out", required=True, help="output .locres path")
     ap.add_argument("--reference", default=None,
                     help="optional existing .locres to reuse structure/hashes from")
@@ -46,7 +47,9 @@ def main(argv=None) -> int:
     ap.add_argument("-q", "--quiet", action="store_true", help="less progress output")
     args = ap.parse_args(argv)
 
-    prefixes = tuple(args.prefix) if args.prefix else ("SurrounDead/",)
+    prefixes = tuple(args.prefix) if args.prefix else (
+        () if os.path.isdir(args.pak) else ("SurrounDead/",)
+    )
     extensions = tuple(args.ext) if args.ext else (".uasset", ".uexp")
     version = {
         "legacy": LocresVersion.Legacy,
@@ -63,7 +66,7 @@ def main(argv=None) -> int:
             sys.stderr.write("\n")
 
     t0 = time.time()
-    print(f"Reading pak: {args.pak}")
+    print(f"Reading source: {args.pak}")
     print(f"  prefixes={prefixes} ext={extensions}")
     sources = extract_pak(args.pak, prefixes=prefixes, extensions=extensions,
                           progress=(None if args.quiet else progress))

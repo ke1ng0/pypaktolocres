@@ -80,8 +80,6 @@ def build_locres(
     for key, val in sources.items():
         if key in existing:
             continue
-        if not val:
-            continue
         # SourceStringHash = UE FString CRC32 of the source string
         ns.add(Entry(key, val, str_crc32(val), is_hash=True))
         added += 1

@@ -36,6 +36,8 @@ cooked UE pak that stores FText keys in `.uasset` / `.uexp`.
   memory (`pyuepak`). Nothing is written to disk except the output you ask for.
 - 🔎 **Byte-level FText extraction** — two validated patterns (Kismet bytecode
   + `FText` map) with a 32-hex key context check to keep false positives low.
+- 📚 **Cooked StringTable support** — reads StringTable keys from the asset
+  name map and their source strings from the paired `.uexp`.
 - 📦 **Proven `.locres` output** — writes the exact **Compact (v1)** format the
   game / a working mod expects (same magic, version byte, layout).
 - 🔁 **Reference mode** — feed an existing `.locres` to reuse its namespace
@@ -187,6 +189,8 @@ offset 80   00              source NUL
 - The **same key** can appear in many files/occurrences. Occurrences are
   accumulated into a per-key `Counter` of sources; the **most frequent** source
   wins on `resolve()`.
+- Cooked StringTable entries are also added as `key → source` pairs. Their
+  `.uasset` and `.uexp` files must be available together.
 
 ### Known limitations
 
@@ -239,11 +243,22 @@ pypaktolocres path/to/Game-Windows.pak \
 A full reference CSV with an empty `th_text` column is written so you can
 translate it and build the target-language `.locres` next.
 
+The input can also be an unpacked asset directory. For example, to build from
+the StringTable assets in `test/`:
+
+```bash
+python -m pypaktolocres test -o out/Whiskerwood.locres
+```
+
+In directory mode, the whole directory is scanned by default; `--prefix` can
+still restrict which relative paths are included. Use `--ns` to assign a
+namespace when building a fresh `.locres`.
+
 ### Options
 
 | flag | meaning |
 |------|---------|
-| `pak` | path to the `.pak` file (positional, required) |
+| `pak` | path to a `.pak` file or unpacked asset directory (positional, required) |
 | `-o, --out` | output `.locres` path (required) |
 | `--reference` | existing `.locres` to reuse structure + `SourceStringHash` from |
 | `--csv` | also write a `key,namespace,en_text,th_text` CSV |
@@ -259,7 +274,7 @@ translate it and build the target-language `.locres` next.
 ```python
 from pypaktolocres import pak_to_locres
 
-# One-shot: pak -> .locres
+# One-shot: pak or unpacked asset directory -> .locres
 pak_to_locres(
     pak="path/to/Game-Windows.pak",
     out="Game_en.locres",

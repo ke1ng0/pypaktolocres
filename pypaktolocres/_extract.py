@@ -157,6 +157,102 @@ def extract_from_bytes(data: bytes,
     return found
 
 
+def _read_name_map(data: bytes) -> Optional[list]:
+    """Find the longest serialized UE name-map run in a package header."""
+    best = []
+    for start in range(max(0, len(data) - 8)):
+        names = []
+        pos = start
+        while pos + 8 <= len(data):
+            size = struct.unpack_from("<I", data, pos)[0]
+            if size < 2 or size > 1024 or pos + 8 + size > len(data):
+                break
+            raw = data[pos + 4:pos + 4 + size]
+            if raw[-1:] != b"\x00" or b"\x00" in raw[:-1]:
+                break
+            try:
+                name = raw[:-1].decode("utf-8")
+            except UnicodeDecodeError:
+                break
+            names.append(name)
+            pos += 4 + size + 4
+        if len(names) > len(best):
+            best = names
+    return best if len(best) >= 2 else None
+
+
+def _read_stringtable_entry(data: bytes, pos: int, names: list):
+    """Read one cooked StringTable key/value record, or return None."""
+    if pos + 14 > len(data):
+        return None
+    name_index, name_number = struct.unpack_from("<ii", data, pos)
+    if not 0 <= name_index < len(names) or not 0 <= name_number <= 100000:
+        return None
+    if struct.unpack_from("<H", data, pos + 8)[0] != 0x0300:
+        return None
+
+    size = struct.unpack_from("<i", data, pos + 10)[0]
+    if abs(size) > 8192:
+        return None
+    start = pos + 14
+    if size < 0:
+        byte_size = -size * 2
+        raw = data[start:start + byte_size]
+        if len(raw) != byte_size or raw[-2:] != b"\x00\x00":
+            return None
+        try:
+            value = raw[:-2].decode("utf-16-le")
+        except UnicodeDecodeError:
+            return None
+        end = start + byte_size
+    elif size > 0:
+        raw = data[start:start + size]
+        if len(raw) != size or raw[-1:] != b"\x00" or b"\x00" in raw[:-1]:
+            return None
+        try:
+            value = raw[:-1].decode("utf-8")
+        except UnicodeDecodeError:
+            return None
+        end = start + size
+    else:
+        value = ""
+        end = start
+
+    key = names[name_index]
+    if name_number:
+        key += f"_{name_number - 1}"
+    if not key:
+        return None
+    return key, value, end
+
+
+def extract_stringtable_from_bytes(uasset: bytes, uexp: bytes) -> dict:
+    """Extract key/source pairs from a cooked UE StringTable asset pair."""
+    names = _read_name_map(uasset)
+    if names is None:
+        return {}
+
+    best = {}
+    start = 0
+    while start + 14 <= len(uexp):
+        first = _read_stringtable_entry(uexp, start, names)
+        if first is None:
+            start += 1
+            continue
+        entries = {}
+        pos = start
+        while True:
+            entry = _read_stringtable_entry(uexp, pos, names)
+            if entry is None:
+                break
+            key, value, pos = entry
+            entries[key] = value
+        if len(entries) > len(best):
+            best = entries
+        start = pos if len(entries) > 1 else start + 1
+    return best
+
+
 def resolve(found: dict) -> dict:
     """Reduce {key: Counter(src) | {src: count}} -> {key: most-common-src}."""
     out = {}
